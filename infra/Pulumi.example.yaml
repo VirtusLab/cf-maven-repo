@@ -1,0 +1,42 @@
+# Copy to Pulumi.<stack>.yaml and fill in. The real file is gitignored: it names an account, a
+# zone and a hostname, none of which belong in a public repository.
+#
+#   cp infra/Pulumi.example.yaml infra/Pulumi.dev.yaml
+#   pulumi -C infra up
+config:
+  # Cloudflare account that owns both the R2 bucket and the zone below.
+  private-cf-maven-repo:accountId: <cloudflare-account-id>
+  # Zone that will serve the repository hostname below.
+  private-cf-maven-repo:zoneId: <cloudflare-zone-id>
+  private-cf-maven-repo:domain: maven.example.com
+  private-cf-maven-repo:bucketName: maven
+  # Location hint: apac | eeur | enam | weur | wnam | oc. Omitted = automatic; the CDN fronts it anyway.
+  # private-cf-maven-repo:location: weur
+
+  # Whether this program manages the zone's cache rules. Off by default: Cloudflare allows one
+  # entry point ruleset per phase per zone and a write replaces its whole rule list, so turning
+  # this on makes this program the owner of every cache rule on the zone, not just its own.
+  # It preserves what is already there and refuses rather than guess - see "The zone's cache
+  # rules" in the README, which also covers adopting a zone that already has some.
+  #
+  # Leaving it off costs only negative-caching suppression: the publisher sets Cache-Control on
+  # every object as it uploads, so both cache classes already work.
+  # private-cf-maven-repo:manageCacheRules: "false"
+
+  # Whether to mint the credential a release job publishes with. Off by default, because it needs
+  # "Account API Tokens: Edit" on whichever token runs this program - the account-scoped group,
+  # not the user-scoped one, since the minted credential is owned by the account rather than by
+  # the person who created it.
+  private-cf-maven-repo:createCiToken: "false"
+
+  # Set to false to mint an upload-only credential that cannot purge. Publishing still works;
+  # stale metadata then waits out its 60-second TTL instead of being purged.
+  # private-cf-maven-repo:ciTokenCanPurge: "true"
+
+  # The permission groups that credential gets - "Workers R2 Storage Bucket Item Write" (the
+  # bucket-scoped group, deliberately not the account-wide "Workers R2 Storage Write" that could
+  # also create and delete buckets) and "Cache Purge" - are looked up by name when the program
+  # runs, so there is nothing to fill in here. Set an id to pin it and skip the lookup, which is
+  # the escape hatch if Cloudflare ever renames a group.
+  # private-cf-maven-repo:r2WritePermissionGroupId: <id>
+  # private-cf-maven-repo:cachePurgePermissionGroupId: <id>

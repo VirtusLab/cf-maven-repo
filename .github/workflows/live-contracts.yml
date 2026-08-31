@@ -1,0 +1,76 @@
+name: live-contracts
+
+# Publishes to a real bucket behind a real hostname, so it never runs for a pull request: forked
+# PRs cannot reach the secrets, and untrusted code must not be handed release credentials.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * *'
+
+jobs:
+  cloudflare-r2:
+    runs-on: ubuntu-latest
+    environment: live-contracts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: sbt
+
+      - uses: sbt/setup-sbt@v1
+
+      - uses: coursier/setup-action@v1
+        with:
+          apps: scala-cli sbt mill cs
+
+      - name: assemble the cli
+        run: sbt -batch cli/assembly
+
+      # A version nothing else will ever claim, so a rerun never collides with an immutable key.
+      - name: pick a run version
+        run: echo "RUN_VERSION=0.0.${{ github.run_number }}" >> "$GITHUB_ENV"
+
+      # Asking for the version before it exists is what arms the rule under test: Cloudflare
+      # caches a 404 by default, and a resolver that probes early would keep seeing it.
+      - name: probe the version before it is published
+        env:
+          REPO_BASE: https://${{ vars.TEST_DOMAIN }}
+        run: |
+          set -euo pipefail
+          URL="$REPO_BASE/releases/org/virtuslab/cf-maven-repo/greeter-sbt_3/$RUN_VERSION/greeter-sbt_3-$RUN_VERSION.pom"
+          echo "PROBED_URL=$URL" >> "$GITHUB_ENV"
+          for _ in 1 2 3; do
+            CODE="$(curl -sS -o /dev/null -w '%{http_code}' "$URL")"
+            [ "$CODE" = "404" ] || { echo "expected 404 before publication, got $CODE"; exit 1; }
+          done
+
+      - name: publish and resolve
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: ${{ secrets.R2_S3_ENDPOINT }}
+          AWS_REGION: auto
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PURGE_TOKEN }}
+          BUCKET: ${{ vars.TEST_BUCKET }}
+          REPO_BASE: https://${{ vars.TEST_DOMAIN }}
+          ZONE_ID: ${{ secrets.TEST_ZONE_ID }}
+        run: ./e2e/run-flow.sh "$RUN_VERSION"
+
+      # Artifact URLs are never purged, so this passes only because failures are not stored.
+      - name: the probed 404 does not outlive its publication
+        run: |
+          set -euo pipefail
+          CODE="$(curl -sS -o /dev/null -w '%{http_code}' "$PROBED_URL")"
+          [ "$CODE" = "200" ] || { echo "expected 200 straight after publication, got $CODE"; exit 1; }
+
+      - name: acceptance checklist
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: ${{ secrets.R2_S3_ENDPOINT }}
+          AWS_REGION: auto
+          BUCKET: ${{ vars.TEST_BUCKET }}
+        run: ./e2e/verify.sh "https://${{ vars.TEST_DOMAIN }}/releases"

@@ -1,0 +1,9 @@
+name: private-cf-maven-repo
+runtime:
+  name: scala
+  options:
+    # besom-core 0.5.2 refuses to guess when both `scala-cli` and `scala` are on PATH, rather
+    # than picking one and compiling with something the author did not choose.
+    use-executor: scala-cli
+description: >
+  A publicly readable Maven repository served from Cloudflare R2 behind a custom domain.

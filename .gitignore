@@ -1,0 +1,25 @@
+target/
+project/target/
+project/project/
+.bsp/
+.idea/
+.metals/
+.bloop/
+# Metals writes this to enable sbt-bloop; it regenerates on demand and is not part of the build.
+project/metals.sbt
+
+# e2e harness working dirs
+e2e/staged/
+e2e/staging/
+e2e/staging-new/
+
+# scala-cli / Pulumi program
+.scala-build/
+
+# Pulumi stack configuration names a real account, zone, hostname and bucket. Pulumi.yaml is the
+# project file and stays tracked; Pulumi.example.yaml is the template to copy.
+infra/Pulumi.*.yaml
+!infra/Pulumi.example.yaml
+
+# Working notes and temporary files.
+tmp/

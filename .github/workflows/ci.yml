@@ -1,0 +1,103 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: sbt
+
+      - uses: sbt/setup-sbt@v1
+
+      # Runs the unit suites, the fault-injected recovery suite, and the S3 contract suite, which
+      # starts its own MinIO-compatible store through Testcontainers. Docker is present on the
+      # runner, so nothing here is skipped.
+      #
+      # testFull, not test: in sbt 2 `test` is testQuick, which skips anything a cache says has
+      # passed. And one command, not several: the thin client joins its arguments into a single
+      # line, so a second task becomes a test filter on the first and nothing runs.
+      - name: core and cloudflare tests
+        run: sbt -batch testFull
+
+      - name: assemble the cli
+        run: sbt -batch cli/assembly
+
+      - name: cli smoke test
+        run: |
+          JAR="$(ls target/out/jvm/*/cf-maven-repo-cli/cf-maven-repo.jar | head -1)"
+          java -jar "$JAR" publish --help > /dev/null
+          java -jar "$JAR" republish-metadata --help > /dev/null
+
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: coursier/setup-action@v1
+        with:
+          apps: scala-cli
+
+      # Compiles only. Applying it needs credentials and is in live-contracts.yml.
+      - name: compile the pulumi program
+        run: scala-cli compile infra --power --server=false
+
+  # The whole publish-and-resolve flow against a disposable MinIO. Everything except the CDN
+  # itself is checkable this way, which is what keeps the resolver matrix on every pull request
+  # rather than on a nightly job with credentials.
+  local-flow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: sbt
+
+      - uses: sbt/setup-sbt@v1
+
+      - uses: coursier/setup-action@v1
+        with:
+          apps: scala-cli sbt cs
+
+      # Not through coursier, whose mill stops at 0.11 and cannot read a build.mill. The launcher
+      # runs whatever version the build's header names.
+      - name: install mill
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL https://repo1.maven.org/maven2/com/lihaoyi/mill-dist/1.1.9/mill-dist-1.1.9-mill.sh -o "$HOME/.local/bin/mill"
+          chmod +x "$HOME/.local/bin/mill"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: assemble the cli
+        run: sbt -batch cli/assembly
+
+      - name: publish to minio and resolve with every build tool
+        run: ./e2e/local-flow.sh
+
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shell syntax
+        run: for f in e2e/*.sh; do bash -n "$f"; done
