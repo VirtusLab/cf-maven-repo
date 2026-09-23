@@ -26,12 +26,8 @@ POM_URL="$REPO_URL/$GROUP_PATH/$ARTIFACT/$VERSION/$ARTIFACT-$VERSION.pom"
 META_URL="$REPO_URL/$GROUP_PATH/$ARTIFACT/maven-metadata.xml"
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-# Found by glob rather than by path: the Scala version is part of the output directory, and
-# nothing here should have to be edited when it moves.
-find_cli_jar() {
-  ls -t "$REPO"/target/out/jvm/*/cf-maven-repo-cli/cf-maven-repo.jar 2>/dev/null | head -1
-}
-CLI_JAR="${CLI_JAR:-$(find_cli_jar)}"
+# shellcheck source=publisher.sh
+. "$REPO/e2e/publisher.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 export COURSIER_CACHE="$WORK/coursier"
@@ -208,8 +204,8 @@ STORE_ARGS=()
 [ -n "${S3_ENDPOINT:-}" ] && STORE_ARGS+=(--endpoint "$S3_ENDPOINT" --path-style)
 echo
 echo "immutability"
-if [ -d "$(dirname "$0")/staging" ] && [ -f "$CLI_JAR" ] && [ -n "${BUCKET:-}" ]; then
-  OUT="$(java -jar "$CLI_JAR" publish --bucket "$BUCKET" "${STORE_ARGS[@]}" \
+if [ -d "$(dirname "$0")/staging" ] && [ -n "${BUCKET:-}" ]; then
+  OUT="$("${PUBLISHER[@]}" publish --bucket "$BUCKET" "${STORE_ARGS[@]}" \
           --staging "$(dirname "$0")/staging" 2>&1)"
   if grep -qi "refusing to republish" <<<"$OUT"; then
     ok "re-publishing an existing version is refused"
@@ -217,7 +213,7 @@ if [ -d "$(dirname "$0")/staging" ] && [ -f "$CLI_JAR" ] && [ -n "${BUCKET:-}" ]
     no "re-publish protection" "expected a refusal, got: $(tail -3 <<<"$OUT")"
   fi
 else
-  skipit "re-publish protection" "needs BUCKET=<bucket>, e2e/stage-test-artifacts.sh, and the publisher jar (sbt cli/assembly)"
+  skipit "re-publish protection" "needs BUCKET=<bucket> and e2e/stage-test-artifacts.sh"
 fi
 
 echo

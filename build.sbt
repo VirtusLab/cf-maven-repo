@@ -7,7 +7,10 @@ val jsoniter = "2.40.1"
 // and the build should say the version it actually compiles against.
 ThisBuild / scalaVersion := "3.3.8"
 ThisBuild / organization := "org.virtuslab"
-ThisBuild / version := "0.1.0-SNAPSHOT"
+ThisBuild / organizationName := "VirtusLab"
+ThisBuild / organizationHomepage := Some(uri("https://virtuslab.com"))
+// No `version` here on purpose: sbt-ci-release derives it from the git tag, and setting one
+// would override the tag a release is cut from.
 ThisBuild / versionScheme := Some("early-semver")
 ThisBuild / licenses := Seq("Apache-2.0" -> uri("https://www.apache.org/licenses/LICENSE-2.0"))
 ThisBuild / description := "Publish and manage a Maven repository on S3-compatible object storage."
@@ -95,6 +98,9 @@ lazy val cli = (project in file("cli"))
       "org.slf4j" % "slf4j-nop" % slf4j,
       "org.scalameta" %% "munit" % "1.3.5" % Test
     ),
+    // Stated rather than discovered: case-app's two Command objects are main classes too, so
+    // discovery finds three and picks none, leaving the published jar without a Main-Class.
+    Compile / mainClass := Some("org.virtuslab.mavenrepo.cli.Main"),
     assembly / mainClass := Some("org.virtuslab.mavenrepo.cli.Main"),
     assembly / assemblyJarName := "cf-maven-repo.jar",
     assembly / assemblyMergeStrategy := {

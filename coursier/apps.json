@@ -1,0 +1,14 @@
+{
+  "cf-maven-repo": {
+    "repositories": ["central"],
+    "dependencies": ["org.virtuslab::cf-maven-repo-cli:latest.release"],
+    "mainClass": "org.virtuslab.mavenrepo.cli.Main",
+    "launcherType": "graalvm-native-image",
+    "prebuiltBinaries": {
+      "x86_64-pc-linux": "gz+https://github.com/VirtusLab/cf-maven-repo/releases/download/v${version}/cf-maven-repo-x86_64-pc-linux.gz",
+      "aarch64-pc-linux": "gz+https://github.com/VirtusLab/cf-maven-repo/releases/download/v${version}/cf-maven-repo-aarch64-pc-linux.gz",
+      "aarch64-apple-darwin": "gz+https://github.com/VirtusLab/cf-maven-repo/releases/download/v${version}/cf-maven-repo-aarch64-apple-darwin.gz",
+      "x86_64-pc-win32": "zip+https://github.com/VirtusLab/cf-maven-repo/releases/download/v${version}/cf-maven-repo-x86_64-pc-win32.zip"
+    }
+  }
+}

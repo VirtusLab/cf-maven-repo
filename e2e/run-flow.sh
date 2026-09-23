@@ -19,13 +19,8 @@ VERSION="${1:-0.1.0}"; shift || true
 . "$HERE/target.sh"
 : "${BUCKET:?set BUCKET to the bucket to publish into}"
 : "${REPO_BASE:?set REPO_BASE to where readers fetch from, e.g. https://maven.example.com}"
-# Build with: sbt cli/assembly
-# Found by glob rather than by path: the Scala version is part of the output directory, and
-# nothing here should have to be edited when it moves.
-find_cli_jar() {
-  ls -t "$REPO"/target/out/jvm/*/cf-maven-repo-cli/cf-maven-repo.jar 2>/dev/null | head -1
-}
-CLI_JAR="${CLI_JAR:-$(find_cli_jar)}"
+# shellcheck source=publisher.sh
+. "$HERE/publisher.sh"
 REPO_URL="$REPO_BASE/releases"
 
 PUBLISH_ARGS=()
@@ -49,9 +44,8 @@ find "$STAGED" -name '*.pom' | sed "s|$STAGED/|  |"
 
 echo
 echo "--- 2/3  upload (checksums, immutability, metadata from store state, purge) ---"
-[ -f "$CLI_JAR" ] || { echo "publisher jar not found at $CLI_JAR (run: sbt cli/assembly)" >&2; exit 1; }
 # Without --endpoint the SDK reads one from AWS_ENDPOINT_URL_S3.
-java -jar "$CLI_JAR" publish --staging "$STAGED" --bucket "$BUCKET" \
+"${PUBLISHER[@]}" publish --staging "$STAGED" --bucket "$BUCKET" \
   "${PUBLISH_ARGS[@]}" "$@" | tail -8
 
 echo

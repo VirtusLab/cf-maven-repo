@@ -17,7 +17,7 @@ config:
   # entry point ruleset per phase per zone and a write replaces its whole rule list, so turning
   # this on makes this program the owner of every cache rule on the zone, not just its own.
   # It preserves what is already there and refuses rather than guess - see "The zone's cache
-  # rules" in the README, which also covers adopting a zone that already has some.
+  # rules" in infra/README.md, which also covers adopting a zone that already has some.
   #
   # Leaving it off costs only negative-caching suppression: the publisher sets Cache-Control on
   # every object as it uploads, so both cache classes already work.

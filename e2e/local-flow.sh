@@ -22,14 +22,9 @@ BUCKET="cf-maven-local"
 USER="miniouser"
 PASS="miniopassword"
 ENDPOINT="http://127.0.0.1:$PORT"
-# Found by glob rather than by path: the Scala version is part of the output directory, and
-# nothing here should have to be edited when it moves.
-find_cli_jar() {
-  ls -t "$REPO"/target/out/jvm/*/cf-maven-repo-cli/cf-maven-repo.jar 2>/dev/null | head -1
-}
-CLI_JAR="${CLI_JAR:-$(find_cli_jar)}"
+# shellcheck source=publisher.sh
+. "$HERE/publisher.sh"
 
-[ -f "$CLI_JAR" ] || { echo "publisher jar not found at $CLI_JAR (run: sbt cli/assembly)" >&2; exit 1; }
 command -v docker >/dev/null || { echo "docker is required" >&2; exit 1; }
 
 cleanup() { docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; }
@@ -62,12 +57,13 @@ export BUCKET
 export S3_ENDPOINT="$ENDPOINT"
 export REPO_BASE="$ENDPOINT/$BUCKET"
 export ZONE_ID=""      # no CDN, so nothing to purge
-export CLI_JAR
+export CLI_BIN="${CLI_BIN:-}"
+export CLI_JAR="${CLI_JAR:-}"
 
 # The fixture set the acceptance checklist reads: three versions, so version ranges and
 # maven-metadata.xml are exercised rather than just an exact fetch.
 "$HERE/stage-test-artifacts.sh" >/dev/null
-java -jar "$CLI_JAR" publish --staging "$HERE/staging" --bucket "$BUCKET" \
+"${PUBLISHER[@]}" publish --staging "$HERE/staging" --bucket "$BUCKET" \
   --endpoint "$ENDPOINT" --path-style | tail -3
 echo
 

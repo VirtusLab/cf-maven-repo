@@ -1,0 +1,111 @@
+name: native build
+
+# Builds one binary per platform coursier names, smoke-tests it, and leaves it as an artifact.
+# Called twice: by the release, which attaches the binaries to the tag, and by the gate, which
+# only wants to know they still build and work.
+on:
+  workflow_call:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Fully static against musl: the binary then depends on no system libc at all. GraalVM
+          # supports this on x64 Linux only.
+          - os: ubuntu-22.04
+            platform: x86_64-pc-linux
+            musl: 'true'
+            link: --static --libc=musl
+            smoke: ''
+          # No musl toolchain for arm64, so everything but libc is static, and the build runs on
+          # the oldest image available to keep the inherited glibc floor low.
+          - os: ubuntu-22.04-arm
+            platform: aarch64-pc-linux
+            musl: 'false'
+            link: --static-nolibc
+            smoke: ''
+          # No Docker on these two, so the smoke test runs without a container.
+          - os: macos-15
+            platform: aarch64-apple-darwin
+            musl: 'false'
+            link: ''
+            smoke: '--lite'
+          - os: windows-latest
+            platform: x86_64-pc-win32
+            musl: 'false'
+            link: ''
+            smoke: '--lite'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '21'
+          distribution: graalvm-community
+          native-image-musl: ${{ matrix.musl }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: sbt/setup-sbt@v1
+
+      - name: assemble the cli
+        shell: bash
+        run: sbt -batch cli/assembly
+
+      # -march=compatibility, not the default: a released binary runs on whatever CPU a user has,
+      # and the difference in throughput is irrelevant next to a network round trip.
+      #
+      # --enable-url-protocols is not optional. Without it the S3 client rejects its own endpoint
+      # as "not a valid URI" and never opens a socket — a binary that still prints a correct
+      # --help, which is why the smoke test below publishes for real.
+      - name: build the native image
+        shell: bash
+        run: |
+          NI="$JAVA_HOME/bin/native-image"
+          [ -x "$NI" ] || NI="$JAVA_HOME/bin/native-image.cmd"
+          JAR="$(ls -t target/out/jvm/*/cf-maven-repo-cli/cf-maven-repo.jar | head -1)"
+          "$NI" --no-fallback \
+            --enable-url-protocols=http,https \
+            -march=compatibility \
+            -H:+ReportExceptionStackTraces \
+            ${{ matrix.link }} \
+            -jar "$JAR" -o cf-maven-repo
+
+      - name: smoke test
+        shell: bash
+        run: |
+          BIN=./cf-maven-repo
+          [ -f "$BIN.exe" ] && BIN="$BIN.exe"
+          ./e2e/native-smoke.sh ${{ matrix.smoke }} "$BIN"
+
+      - name: compress
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "x86_64-pc-win32" ]; then
+            7z a "cf-maven-repo-${{ matrix.platform }}.zip" cf-maven-repo.exe
+          else
+            gzip -9 -c cf-maven-repo > "cf-maven-repo-${{ matrix.platform }}.gz"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cf-maven-repo-${{ matrix.platform }}
+          path: cf-maven-repo-${{ matrix.platform }}.*
+          if-no-files-found: error
+          retention-days: 7
+
+  # One check to require, instead of one per platform. It lives here, inside the called workflow,
+  # so it exists only when the caller actually ran: a caller job skipped for want of the label
+  # reports success, and a required check that reports success on a build that never happened is
+  # not a gate.
+  gate:
+    needs: [build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: every platform built and passed its smoke test
+        run: |
+          echo "native builds: ${{ needs.build.result }}"
+          [ "${{ needs.build.result }}" = "success" ] || exit 1

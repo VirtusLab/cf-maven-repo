@@ -1,0 +1,57 @@
+name: release
+
+# A release is a git tag, and it produces two things: the library on Maven Central, and native
+# binaries attached to the GitHub release. `cs install` uses both — it reads the version from
+# Central and then downloads a binary, so an install neither resolves a dependency tree nor
+# downloads a jar.
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  central:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # dynver reads the version from the tag, which a shallow clone does not carry.
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: sbt
+
+      - uses: sbt/setup-sbt@v1
+
+      - name: publish to maven central
+        run: sbt ci-release
+        env:
+          PGP_SECRET: ${{ secrets.PGP_SECRET }}
+          PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+
+  # Same build the pull-request gate runs, so a release never builds something unproven.
+  native:
+    uses: ./.github/workflows/native-build.yml
+
+  # Both halves have to be in place before the release exists: the descriptor reads the version
+  # from Central and downloads the binary from here.
+  github-release:
+    needs: [central, native]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: binaries
+          merge-multiple: true
+
+      - name: publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "${{ github.ref_name }}" binaries/* --title "${{ github.ref_name }}" --generate-notes

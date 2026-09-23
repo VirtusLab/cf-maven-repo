@@ -24,7 +24,16 @@ jobs:
 
       - uses: coursier/setup-action@v1
         with:
-          apps: scala-cli sbt mill cs
+          apps: scala-cli sbt cs
+
+      # Not through coursier, whose mill stops at 0.11 and cannot read a build.mill. The launcher
+      # runs whatever version the build's header names.
+      - name: install mill
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL https://repo1.maven.org/maven2/com/lihaoyi/mill-dist/1.1.9/mill-dist-1.1.9-mill.sh -o "$HOME/.local/bin/mill"
+          chmod +x "$HOME/.local/bin/mill"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: assemble the cli
         run: sbt -batch cli/assembly
@@ -65,6 +74,22 @@ jobs:
           set -euo pipefail
           CODE="$(curl -sS -o /dev/null -w '%{http_code}' "$PROBED_URL")"
           [ "$CODE" = "200" ] || { echo "expected 200 straight after publication, got $CODE"; exit 1; }
+
+      # The checklist reads a fixed three-version fixture, because version ranges and qualifier
+      # ordering need more versions than the one this run published. Publishing it is idempotent:
+      # the versions are immutable, so every night after the first skips them.
+      - name: stage the checklist fixtures
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: ${{ secrets.R2_S3_ENDPOINT }}
+          AWS_REGION: auto
+          BUCKET: ${{ vars.TEST_BUCKET }}
+        run: |
+          set -euo pipefail
+          ./e2e/stage-test-artifacts.sh
+          JAR="$(ls -t target/out/jvm/*/cf-maven-repo-cli/cf-maven-repo.jar | head -1)"
+          java -jar "$JAR" publish --staging e2e/staging --bucket "$BUCKET" --skip-existing
 
       - name: acceptance checklist
         env:

@@ -1,0 +1,35 @@
+name: native gate
+
+# The merge gate for the native binaries.
+#
+# `native / gate` is the check to mark required. It is reported only by a run that a maintainer
+# asked for, by labelling the pull request `build-native`, so an unlabelled pull request leaves it
+# at "Expected" and cannot merge. Do not require `native`: a caller job skipped for want of the
+# label reports success, which would unlock the merge this is meant to hold.
+#
+# The label is stripped whenever new commits arrive, so the decision is made again for the commit
+# that is actually about to merge rather than inherited from an older one.
+on:
+  pull_request:
+    types: [labeled, synchronize]
+
+concurrency:
+  group: native-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    if: github.event.action == 'labeled' && github.event.label.name == 'build-native'
+    uses: ./.github/workflows/native-build.yml
+
+  reset:
+    if: github.event.action == 'synchronize'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: drop the label so the new commit needs its own approval
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: gh pr edit "${{ github.event.pull_request.number }}" --remove-label build-native || true
