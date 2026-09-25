@@ -53,9 +53,11 @@ OUT="$("$BIN" publish --help 2>&1)" && grep -q -- '--staging' <<<"$OUT" \
 
 # The failure this is really looking for: without --enable-url-protocols the S3 client rejects
 # its own endpoint as "not a valid URI" and never opens a socket. Refusing to connect is the
-# right answer here; refusing to parse is not.
+# right answer here; refusing to parse is not. The credentials are dummies, but they must be
+# there: without them the SDK stops at its credentials chain and never reaches the endpoint.
 for scheme in http https; do
-  OUT="$("$BIN" publish --staging "$WORK/staging" --bucket smoke \
+  OUT="$(AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE AWS_SECRET_ACCESS_KEY=notarealsecretkey AWS_REGION=us-east-1 \
+         "$BIN" publish --staging "$WORK/staging" --bucket smoke \
            --endpoint "$scheme://127.0.0.1:1" --path-style 2>&1 || true)"
   if grep -qi 'not a valid URI' <<<"$OUT"; then
     no "$scheme protocol handler" "$(grep -i 'not a valid URI' <<<"$OUT" | head -1)"
