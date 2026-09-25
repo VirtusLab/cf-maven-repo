@@ -4,6 +4,14 @@ name: release
 # binaries attached to the GitHub release. `cs install` uses both — it reads the version from
 # Central and then downloads a binary, so an install neither resolves a dependency tree nor
 # downloads a jar.
+#
+# The GitHub release is written by a person, not by this workflow: create it (a draft is fine)
+# before pushing the tag, and the binaries are attached to it. Without one the binaries half fails
+# in its first seconds rather than after the builds.
+#
+# A tag ending in -SNAPSHOT runs the whole pipeline too, as a rehearsal: the only difference is
+# that the library goes to Central's snapshot repository, which lets a version be overwritten,
+# instead of becoming a permanent release.
 on:
   push:
     tags: ['v*']
@@ -26,6 +34,7 @@ jobs:
       - uses: sbt/setup-sbt@v1
 
       - name: publish to maven central
+        if: ${{ !endsWith(github.ref_name, '-SNAPSHOT') }}
         run: sbt ci-release
         env:
           PGP_SECRET: ${{ secrets.PGP_SECRET }}
@@ -33,14 +42,41 @@ jobs:
           SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
           SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
 
+      # Plain publish, not ci-release: on a tag that would sign, which the snapshot repository
+      # rejects (it refuses the .asc checksums), and then release a staging bundle that does not
+      # exist. build.sbt routes a -SNAPSHOT version to the snapshot repository.
+      - name: publish a snapshot to maven central
+        if: ${{ endsWith(github.ref_name, '-SNAPSHOT') }}
+        run: sbt -batch publish
+        env:
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+
+  # gh finds a draft by the tag it will create when published, so a draft passes. Write access is
+  # what makes drafts visible to the token at all.
+  release-exists:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: the GitHub release for this tag exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$TAG" --json isDraft -q '"found \(if .isDraft then "draft" else "published" end) release"'; then
+            echo "::error::no GitHub release for $TAG. Create one (a draft is fine), then re-run this workflow."
+            exit 1
+          fi
+
   # Same build the pull-request gate runs, so a release never builds something unproven.
   native:
+    needs: [release-exists]
     uses: ./.github/workflows/native-build.yml
 
-  # Both halves have to be in place before the release exists: the descriptor reads the version
-  # from Central and downloads the binary from here.
-  github-release:
-    needs: [central, native]
+  attach:
+    needs: [native]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -50,8 +86,9 @@ jobs:
           path: binaries
           merge-multiple: true
 
-      - name: publish the release
+      # --clobber, so re-running a failed release replaces what an earlier attempt uploaded.
+      - name: attach the binaries to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "${{ github.ref_name }}" binaries/* --title "${{ github.ref_name }}" --generate-notes
+        run: gh release upload "${{ github.ref_name }}" binaries/* --clobber

@@ -11,6 +11,10 @@ ThisBuild / organizationName := "VirtusLab"
 ThisBuild / organizationHomepage := Some(uri("https://virtuslab.com"))
 // No `version` here on purpose: sbt-ci-release derives it from the git tag, and setting one
 // would override the tag a release is cut from.
+//
+// A snapshot is judged by its version, not by dynver's rule that any exact tag is a release: a
+// `v0.1.0-SNAPSHOT` tag has to publish to Central's snapshot repository, not stage a release.
+ThisBuild / isSnapshot := (ThisBuild / version).value.endsWith("-SNAPSHOT")
 ThisBuild / versionScheme := Some("early-semver")
 ThisBuild / licenses := Seq("Apache-2.0" -> uri("https://www.apache.org/licenses/LICENSE-2.0"))
 ThisBuild / description := "Publish and manage a Maven repository on S3-compatible object storage."
