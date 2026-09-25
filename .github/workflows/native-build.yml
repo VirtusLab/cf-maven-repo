@@ -6,6 +6,10 @@ name: native build
 on:
   workflow_call:
 
+# Read-only unless a job asks for more: the repository default hands every job a write token.
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:

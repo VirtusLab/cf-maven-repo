@@ -16,6 +16,10 @@ on:
   push:
     tags: ['v*']
 
+# Read-only unless a job asks for more: the repository default hands every job a write token.
+permissions:
+  contents: read
+
 jobs:
   central:
     runs-on: ubuntu-latest

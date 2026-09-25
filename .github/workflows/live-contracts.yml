@@ -7,6 +7,10 @@ on:
   schedule:
     - cron: '17 4 * * *'
 
+# Read-only unless a job asks for more: the repository default hands every job a write token.
+permissions:
+  contents: read
+
 jobs:
   cloudflare-r2:
     runs-on: ubuntu-latest
