@@ -16,6 +16,13 @@ on:
   push:
     tags: ['v*']
 
+# One release at a time, and never cancelled: a publish stopped halfway can leave Central staged
+# and the GitHub release half-filled. GitHub holds only one waiting run per group, though: a third
+# tag pushed while one runs and one waits replaces the waiting one, which then has to be re-run.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 # Read-only unless a job asks for more: the repository default hands every job a write token.
 permissions:
   contents: read
@@ -28,6 +35,15 @@ jobs:
         with:
           # dynver reads the version from the tag, which a shallow clone does not carry.
           fetch-depth: 0
+
+      # dynver takes the version from `git describe`, which has to choose when a commit carries
+      # more than one tag — say v0.1.0 and a v0.1.0-SNAPSHOT rehearsal. checkout fetches the tag
+      # being built as a lightweight one, so nothing ranks it first, and v0.1.0 once went out as
+      # 0.0.1-SNAPSHOT. Only the tag this run is for may stay on HEAD.
+      - name: keep only this run's tag on HEAD
+        run: |
+          git tag --points-at HEAD | grep -vxF "$GITHUB_REF_NAME" | xargs -r git tag -d
+          echo "dynver will read: $(git describe --tags --abbrev=8 --match 'v[0-9]*')"
 
       - uses: actions/setup-java@v4
         with:
