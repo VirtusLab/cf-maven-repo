@@ -159,16 +159,18 @@ gh release create v0.1.0-SNAPSHOT --prerelease --target master --title v0.1.0-SN
 Use a prerelease, not a draft: a draft creates no tag, and its downloads are not public, so the
 install below would silently fall back to a JVM launcher.
 
-The published channel cannot install a snapshot. Its descriptor names only Central, which `-r`
-does not override, and it looks up the `_3` suffix through `maven-metadata.xml`, which sbt does
-not publish to the snapshot repository. A scratch copy that fixes both does:
+The published channel cannot install a snapshot on its own: its descriptor names only Central,
+and `-r` does not override that. A scratch copy that adds the snapshot repository does:
 
 ```bash
-jq '."cf-maven-repo".repositories += ["https://central.sonatype.com/repository/maven-snapshots/"]
-  | ."cf-maven-repo".dependencies = ["org.virtuslab:cf-maven-repo-cli_3:latest.release"]' \
+jq '."cf-maven-repo".repositories += ["https://central.sonatype.com/repository/maven-snapshots/"]' \
   coursier/apps.json > /tmp/apps-snapshot.json
 cs install --dir "$(mktemp -d)" --channel file:///tmp/apps-snapshot.json cf-maven-repo:0.1.0-SNAPSHOT
 ```
+
+The descriptor names the CLI as `cf-maven-repo-cli_3`, not with `::`. Coursier resolves `::` by
+reading a directory listing of the group, which Central serves from a cache that can lag a new
+artifact by a day, and which the snapshot repository does not serve at all.
 
 The installed `cf-maven-repo` is a two-line shell wrapper; the native binary beside it is
 `.cf-maven-repo.aux`.
