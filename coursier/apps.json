@@ -1,7 +1,7 @@
 {
   "cf-maven-repo": {
     "repositories": ["central"],
-    "dependencies": ["org.virtuslab::cf-maven-repo-cli:latest.release"],
+    "dependencies": ["org.virtuslab:cf-maven-repo-cli_3:latest.release"],
     "mainClass": "org.virtuslab.mavenrepo.cli.Main",
     "launcherType": "graalvm-native-image",
     "prebuiltBinaries": {

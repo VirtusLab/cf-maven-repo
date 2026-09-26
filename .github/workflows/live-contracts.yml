@@ -7,6 +7,12 @@ on:
   schedule:
     - cron: '17 4 * * *'
 
+# One run at a time against the shared test bucket, so a manual run and the nightly one cannot
+# interleave their writes to the same metadata.
+concurrency:
+  group: live-contracts
+  cancel-in-progress: false
+
 # Read-only unless a job asks for more: the repository default hands every job a write token.
 permissions:
   contents: read
