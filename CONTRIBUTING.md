@@ -22,9 +22,10 @@ e2e/local-flow.sh   # publish and resolve, end to end, against a disposable MinI
 ```
 
 Because a Maven repository is a naming convention over HTTP GETs, almost all of it can be checked
-without an account: this starts a MinIO, makes the bucket anonymously readable, publishes two
-libraries built by two different build tools, and resolves them back with scala-cli, coursier, sbt,
-gradle and mill — version ranges included. Only edge caching and purging need a real CDN.
+without an account: this starts a MinIO, makes the bucket anonymously readable, publishes three
+libraries built by scala-cli, sbt and mill, and resolves them back with scala-cli, coursier, sbt,
+gradle and mill — version ranges included. Only edge caching and purging need a real CDN. Mill
+needs no install: the harness uses the launcher committed in `e2e/lib-mill/`.
 
 To run the harness against a real repository, say so in the environment:
 

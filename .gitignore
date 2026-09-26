@@ -12,6 +12,7 @@ project/metals.sbt
 e2e/staged/
 e2e/staging/
 e2e/staging-new/
+e2e/lib-mill/out/
 
 # scala-cli / Pulumi program
 .scala-build/

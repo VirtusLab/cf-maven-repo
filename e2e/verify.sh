@@ -175,9 +175,10 @@ else
 fi
 
 # mill
-MILL=""
-command -v mill >/dev/null && MILL="mill"
-if [ -n "$MILL" ]; then
+# The launcher committed beside the mill fixture works without an install, and runs whatever
+# version a build's header names.
+MILL="$HERE/lib-mill/mill"
+if [ -x "$MILL" ]; then
   mkdir -p "$WORK/mill"
   # Pinned in the header, which any Mill launcher honours: the build below is Mill 1 syntax.
   cat > "$WORK/mill/build.mill" <<MILL_BUILD
@@ -192,10 +193,10 @@ object verify extends ScalaModule {
 }
 MILL_BUILD
   # show, not a bare target: mill only prints a task's result when asked to.
-  OUT="$(cd "$WORK/mill" && $MILL show verify.resolvedMvnDeps 2>&1)"
+  OUT="$(cd "$WORK/mill" && "$MILL" show verify.resolvedMvnDeps 2>&1)"
   if grep -q "$ARTIFACT-$VERSION.jar" <<<"$OUT"; then ok "mill resolves"; else no "mill" "$(tail -5 <<<"$OUT")"; fi
 else
-  skipit "mill" "not on PATH - install the launcher from https://mill-build.org (coursier's mill is 0.11)"
+  skipit "mill" "launcher missing at $MILL"
 fi
 
 # --- immutability --------------------------------------------------------------------------
