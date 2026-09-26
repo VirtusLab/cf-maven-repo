@@ -84,15 +84,6 @@ jobs:
         with:
           apps: scala-cli sbt cs
 
-      # Not through coursier, whose mill stops at 0.11 and cannot read a build.mill. The launcher
-      # runs whatever version the build's header names.
-      - name: install mill
-        run: |
-          mkdir -p "$HOME/.local/bin"
-          curl -fsSL https://repo1.maven.org/maven2/com/lihaoyi/mill-dist/1.1.9/mill-dist-1.1.9-mill.sh -o "$HOME/.local/bin/mill"
-          chmod +x "$HOME/.local/bin/mill"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
       - name: assemble the cli
         run: sbt -batch cli/assembly
 

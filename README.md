@@ -25,21 +25,56 @@ coursier falls back to a JVM launcher built from the same release. Building from
 As a library:
 
 ```scala
-libraryDependencies += "org.virtuslab" %% "cf-maven-repo-core" % "<version>"
+libraryDependencies += "org.virtuslab" %% "cf-maven-repo-core" % "0.1.0"
 ```
 
-## How it fits together
+## Using it with your build
 
-Build tools already know how to write a Maven-layout directory:
+Build tools already know how to write a Maven-layout directory. They write it, and this uploads
+it, so the build never needs object-store credentials. That split is deliberate: a release job's
+credentials should reach one bucket and nothing else, and it keeps the same code path working
+against a Nexus or an Artifactory.
+
+**1. Stage.** Each tool writes the directory in its own way; several can write to the same one.
+
+```scala
+// sbt: build.sbt, then `sbt publish`
+publishTo := Some(MavenCache("staged", file("staged")))
+```
 
 ```bash
-scala-cli --power publish -R ./staged .             # scala-cli
-sbt publish   # with publishTo := Some(MavenCache("staged", file("...")))
+# scala-cli: needs the //> using publish.* directives (organization, name, version, ...)
+scala-cli --power publish . -R ./staged --signer none
 ```
 
-Neither needs object-store credentials — they write a directory, and this uploads it. That split
-is deliberate: a release job's credentials should reach one bucket and nothing else, and it keeps
-the same code path working against a Nexus or an Artifactory.
+```bash
+# mill: any module extending PublishModule
+./mill __.publishM2Local --m2RepoPath "$PWD/staged"
+```
+
+**2. Upload.** Credentials come from the usual `AWS_*` variables (see [Credentials](#credentials)).
+
+```bash
+cf-maven-repo publish --staging ./staged --bucket my-maven --endpoint https://<account>.r2.cloudflarestorage.com
+```
+
+**3. Resolve.** Artifacts land under `releases/` by default (`--prefix`), so point resolvers at
+the bucket's public URL with that suffix:
+
+```scala
+// sbt
+resolvers += "my-maven" at "https://maven.example.com/releases"
+```
+
+```scala
+// scala-cli
+//> using repository https://maven.example.com/releases
+```
+
+```scala
+// mill
+def repositories = Task { super.repositories() :+ "https://maven.example.com/releases" }
+```
 
 ## Modules
 
@@ -158,5 +193,6 @@ into one bucket and bust one cache, and nothing else.
 
 ## Status
 
-Early. Not on Maven Central yet, so the API can still move; the release path is in place for when
-it settles. [CONTRIBUTING.md](CONTRIBUTING.md) covers testing and releasing. Licence Apache-2.0.
+Early. 0.1.0 is on Maven Central, but the library API can still change: versions follow
+early-semver, so before 1.0 a minor release may break it while a patch release will not.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers testing and releasing. Licence Apache-2.0.

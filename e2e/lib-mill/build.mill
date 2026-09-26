@@ -1,0 +1,21 @@
+//| mill-version: 1.1.9
+package build
+import mill.*, mill.scalalib.*, mill.scalalib.publish.*
+
+// Stages with `./mill greeter.publishM2Local --m2RepoPath <dir>`: a plain Maven-layout directory,
+// which the publisher then uploads. Mill never talks to the object store.
+object greeter extends ScalaModule, PublishModule {
+  def scalaVersion = "3.3.7"
+  def artifactName = "greeter-mill"
+  // An input, not a plain task: Mill caches a task by its inputs, and would otherwise keep
+  // publishing whichever version it saw first.
+  def publishVersion = Task.Input { Task.env.getOrElse("FLOW_VERSION", "0.1.0") }
+  def pomSettings = PomSettings(
+    description = "Round-trip fixture for cf-maven-repo",
+    organization = "org.virtuslab.cf-maven-repo",
+    url = "https://github.com/VirtusLab/cf-maven-repo",
+    licenses = Seq(License.`Apache-2.0`),
+    versionControl = VersionControl.github("VirtusLab", "cf-maven-repo"),
+    developers = Nil
+  )
+}

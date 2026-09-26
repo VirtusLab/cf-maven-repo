@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Round trip: build two libraries with two different build tools, publish both, then resolve them
-# back from a cold cache.
+# Round trip: build three libraries with three different build tools, publish them all, then
+# resolve them back from a cold cache.
 #
 #   usage: e2e/run-flow.sh [version] [extra publisher args...]
 #
@@ -32,13 +32,15 @@ if [ -n "$ZONE_ID" ]; then
   PUBLISH_ARGS+=(--public-url "$REPO_BASE" --cf-zone-id "$ZONE_ID")
 fi
 
-echo "==> publishing greeter-scalacli + greeter-sbt $VERSION, then resolving them from $REPO_URL"
+echo "==> publishing greeter-scalacli + greeter-sbt + greeter-mill $VERSION, then resolving them from $REPO_URL"
 echo
 
-echo "--- 1/3  build and stage (scala-cli publish + sbt publish, same directory) ---"
+echo "--- 1/3  build and stage (scala-cli, sbt and mill, same directory) ---"
 rm -rf "$STAGED"; mkdir -p "$STAGED"
 scala-cli --power publish lib-scala-cli -R "$STAGED" --signer none --project-version "$VERSION" --quiet
 ( cd lib-sbt && STAGE_DIR="$STAGED" FLOW_VERSION="$VERSION" sbt -batch publish >/dev/null )
+# Through the launcher committed beside the build, so no mill needs to be installed.
+( cd lib-mill && FLOW_VERSION="$VERSION" ./mill --ticker false greeter.publishM2Local --m2RepoPath "$STAGED" >/dev/null )
 echo "staged:"
 find "$STAGED" -name '*.pom' | sed "s|$STAGED/|  |"
 
@@ -61,8 +63,9 @@ OUT="$(scala-cli run "$WORK/consume.scala" --quiet 2>&1)"
 echo "$OUT" | sed 's/^/  /'
 
 echo
-if grep -q '\[scala-cli\] hello cf-maven-repo' <<<"$OUT" && grep -q '\[sbt\] hello cf-maven-repo' <<<"$OUT"; then
-  printf '\033[32mPASS\033[0m  full round trip: scala-cli + sbt -> R2 -> scala-cli resolve\n'
+if grep -q '\[scala-cli\] hello cf-maven-repo' <<<"$OUT" && grep -q '\[sbt\] hello cf-maven-repo' <<<"$OUT" \
+   && grep -q '\[mill\] hello cf-maven-repo' <<<"$OUT"; then
+  printf '\033[32mPASS\033[0m  full round trip: scala-cli + sbt + mill -> store -> scala-cli resolve\n'
 else
-  printf '\033[31mFAIL\033[0m  consumer did not print both greetings\n'; exit 1
+  printf '\033[31mFAIL\033[0m  consumer did not print all three greetings\n'; exit 1
 fi
