@@ -149,24 +149,41 @@ A tag ending in `-SNAPSHOT` is a rehearsal of the whole release: the same workfl
 release check, the same four native builds attached to the GitHub release. The one difference is
 that the library goes to Central's snapshot repository instead of becoming a permanent release.
 
+A published prerelease creates its own tag on `master`, and that tag starts the workflow, so one
+command is the whole rehearsal:
+
 ```bash
-gh release create v0.1.0-SNAPSHOT --prerelease --title v0.1.0-SNAPSHOT --notes "rehearsal"
+gh release create v0.1.0-SNAPSHOT --prerelease --target master --title v0.1.0-SNAPSHOT --notes "rehearsal"
+```
+
+Use a prerelease, not a draft: a draft creates no tag, and its downloads are not public, so the
+install below would silently fall back to a JVM launcher.
+
+The published channel cannot install a snapshot. Its descriptor names only Central, which `-r`
+does not override, and it looks up the `_3` suffix through `maven-metadata.xml`, which sbt does
+not publish to the snapshot repository. A scratch copy that fixes both does:
+
+```bash
+jq '."cf-maven-repo".repositories += ["https://central.sonatype.com/repository/maven-snapshots/"]
+  | ."cf-maven-repo".dependencies = ["org.virtuslab:cf-maven-repo-cli_3:latest.release"]' \
+  coursier/apps.json > /tmp/apps-snapshot.json
+cs install --dir "$(mktemp -d)" --channel file:///tmp/apps-snapshot.json cf-maven-repo:0.1.0-SNAPSHOT
+```
+
+The installed `cf-maven-repo` is a two-line shell wrapper; the native binary beside it is
+`.cf-maven-repo.aux`.
+
+Snapshot versions can be overwritten, so moving the tag runs everything again, and the upload
+replaces the binaries:
+
+```bash
 git tag -f v0.1.0-SNAPSHOT && git push -f origin v0.1.0-SNAPSHOT
 ```
 
-Make it a published prerelease, not a draft, if you want to try the install: a draft's downloads
-are not public, and coursier would fall back to a JVM launcher without saying so.
-
-```bash
-cs install --dir "$(mktemp -d)" --channel https://raw.githubusercontent.com/VirtusLab/cf-maven-repo/master/coursier/apps.json \
-  -r https://central.sonatype.com/repository/maven-snapshots/ cf-maven-repo:0.1.0-SNAPSHOT
-```
-
-Snapshot versions can be overwritten, so moving the tag and force-pushing it runs everything
-again, and the upload replaces the binaries. `build.sbt` treats any version ending in `-SNAPSHOT`
-as a snapshot, overriding dynver, which would call an exact tag a release. Snapshots must be
-enabled once for the namespace in the Central Portal, and Central deletes them after 90 days. To
-use one from a build, add `resolvers += Resolver.sonatypeCentralSnapshots`.
+`build.sbt` treats any version ending in `-SNAPSHOT` as a snapshot, overriding dynver, which would
+call an exact tag a release. Snapshots must be enabled once for the namespace in the Central
+Portal, and Central deletes them after 90 days. To use one from a build, add
+`resolvers += Resolver.sonatypeCentralSnapshots`.
 
 The release workflow needs four repository secrets (a snapshot uses only the two Sonatype ones):
 

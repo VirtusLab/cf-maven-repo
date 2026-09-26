@@ -51,6 +51,14 @@ echo "the binary itself"
 OUT="$("$BIN" publish --help 2>&1)" && grep -q -- '--staging' <<<"$OUT" \
   && ok "publish --help" || no "publish --help" "$(head -2 <<<"$OUT")"
 
+# The JVM's own warnings, such as the sun.misc.Unsafe deprecation, carry over into a native image
+# unless the build turns them off, and would open every run a user makes.
+if grep -q '^WARNING:' <<<"$OUT"; then
+  no "runs without JVM warnings" "$(grep '^WARNING:' <<<"$OUT" | head -1)"
+else
+  ok "runs without JVM warnings"
+fi
+
 # The failure this is really looking for: without --enable-url-protocols the S3 client rejects
 # its own endpoint as "not a valid URI" and never opens a socket. Refusing to connect is the
 # right answer here; refusing to parse is not. The credentials are dummies, but they must be

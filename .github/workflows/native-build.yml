@@ -67,6 +67,9 @@ jobs:
       # --enable-url-protocols is not optional. Without it the S3 client rejects its own endpoint
       # as "not a valid URI" and never opens a socket — a binary that still prints a correct
       # --help, which is why the smoke test below publishes for real.
+      #
+      # The unsafe property is baked into the binary. Scala 3.3's LazyVals uses sun.misc.Unsafe,
+      # and from JDK 24 every run would otherwise open with three lines of deprecation warnings.
       - name: build the native image
         shell: bash
         run: |
@@ -75,6 +78,7 @@ jobs:
           JAR="$(ls -t target/out/jvm/*/cf-maven-repo-cli/cf-maven-repo.jar | head -1)"
           "$NI" --no-fallback \
             --enable-url-protocols=http,https \
+            -Dsun.misc.unsafe.memory.access=allow \
             -march=compatibility \
             -H:+ReportExceptionStackTraces \
             ${{ matrix.link }} \
