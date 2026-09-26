@@ -6,6 +6,10 @@ name: native build
 on:
   workflow_call:
 
+# Read-only unless a job asks for more: the repository default hands every job a write token.
+permissions:
+  contents: read
+
 jobs:
   build:
     strategy:
@@ -41,9 +45,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned to an exact release, the newest in coursier's JVM index (graalvm-community:25.0.2,
+      # the same graalvm-ce-builds archive), so what CI builds with is what a local build fetches.
+      # Not '21': GraalVM CE stopped at 21.0.2, whose native-image has no --static-nolibc.
       - uses: graalvm/setup-graalvm@v1
         with:
-          java-version: '21'
+          java-version: '25.0.2'
           distribution: graalvm-community
           native-image-musl: ${{ matrix.musl }}
           github-token: ${{ secrets.GITHUB_TOKEN }}

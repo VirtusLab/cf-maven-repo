@@ -113,14 +113,24 @@ runs the full resolver matrix against it instead of the jar.
 ## Releasing
 
 A release is a git tag. `sbt-ci-release` reads the version from it, signs every artifact, and
-uploads them through sbt 2's own Sonatype staging to the Central Portal:
+uploads them through sbt 2's own Sonatype staging to the Central Portal.
+
+Write the GitHub release first — a draft is enough, and its tag need not exist yet — then push
+the tag:
 
 ```bash
+gh release create v0.1.0 --draft --title v0.1.0 --generate-notes
 git tag -a v0.1.0 -m v0.1.0 && git push origin v0.1.0
 ```
 
-`.github/workflows/release.yml` does the rest. Nothing publishes from a branch, and the version is
-never written in `build.sbt` — the tag is the single place a version is stated.
+`.github/workflows/release.yml` does the rest: Central and the native binaries run in parallel,
+and the binaries are attached to the release you wrote. If there is no release for the tag, the
+binaries half fails within seconds; create the release and re-run the workflow. Nothing publishes
+from a branch, and the version is never written in `build.sbt` — the tag is the single place a
+version is stated.
+
+Publish the draft as soon as the workflow is green. Until then its downloads are not public, and
+`cs install` — which already sees the version on Central — silently falls back to a JVM launcher.
 
 A tag produces two halves, and `cs install` needs both: the library on Central, and a native
 binary per platform attached to the GitHub release. `coursier/apps.json` points at them through
@@ -133,7 +143,32 @@ so a release binary runs on any CPU of its architecture. x64 Linux links statica
 and needs no system libc; arm64 Linux has no musl toolchain, so it is static except for glibc and
 builds on the oldest runner image to keep that floor low.
 
-The job needs four repository secrets:
+### Snapshots
+
+A tag ending in `-SNAPSHOT` is a rehearsal of the whole release: the same workflow, the same
+release check, the same four native builds attached to the GitHub release. The one difference is
+that the library goes to Central's snapshot repository instead of becoming a permanent release.
+
+```bash
+gh release create v0.1.0-SNAPSHOT --prerelease --title v0.1.0-SNAPSHOT --notes "rehearsal"
+git tag -f v0.1.0-SNAPSHOT && git push -f origin v0.1.0-SNAPSHOT
+```
+
+Make it a published prerelease, not a draft, if you want to try the install: a draft's downloads
+are not public, and coursier would fall back to a JVM launcher without saying so.
+
+```bash
+cs install --dir "$(mktemp -d)" --channel https://raw.githubusercontent.com/VirtusLab/cf-maven-repo/master/coursier/apps.json \
+  -r https://central.sonatype.com/repository/maven-snapshots/ cf-maven-repo:0.1.0-SNAPSHOT
+```
+
+Snapshot versions can be overwritten, so moving the tag and force-pushing it runs everything
+again, and the upload replaces the binaries. `build.sbt` treats any version ending in `-SNAPSHOT`
+as a snapshot, overriding dynver, which would call an exact tag a release. Snapshots must be
+enabled once for the namespace in the Central Portal, and Central deletes them after 90 days. To
+use one from a build, add `resolvers += Resolver.sonatypeCentralSnapshots`.
+
+The release workflow needs four repository secrets (a snapshot uses only the two Sonatype ones):
 
 | Secret | What it is |
 |---|---|

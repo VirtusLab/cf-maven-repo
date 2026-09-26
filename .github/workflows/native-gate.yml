@@ -17,6 +17,10 @@ concurrency:
   group: native-gate-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+# Read-only unless a job asks for more: the repository default hands every job a write token.
+permissions:
+  contents: read
+
 jobs:
   native:
     if: github.event.action == 'labeled' && github.event.label.name == 'build-native'
