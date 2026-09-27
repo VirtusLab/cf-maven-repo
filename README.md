@@ -104,7 +104,8 @@ the run and puts the build's own back afterwards, whether it succeeds or fails. 
 named as a string, so signing needs sbt-pgp in the build but not in the plugin, and
 `"cfMavenRepoRelease +publishSigned"` cross-builds. To stage by hand instead, as with sbt's own
 `localStaging`, set `publishTo := cfMavenRepoStaging.value`, run `publish`, then
-`cfMavenRepoUpload`. `cfMavenRepoRepublishMetadata <groupId>` is the plugin's `republish-metadata`.
+`cfMavenRepoUpload`. `cfMavenRepoRepublishMetadata <groupId>` is the plugin's `republish-metadata`; with
+`cfMavenRepoDryRun` it only lists the files it would rebuild.
 
 Every CLI flag is a `ThisBuild` setting of the same name: `cfMavenRepoPrefix`,
 `cfMavenRepoPathStyle`, `cfMavenRepoDryRun`, `cfMavenRepoSkipExisting`, `cfMavenRepoLedger` and so

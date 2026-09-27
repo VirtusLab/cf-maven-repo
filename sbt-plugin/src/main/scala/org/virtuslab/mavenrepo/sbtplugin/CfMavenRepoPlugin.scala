@@ -166,12 +166,15 @@ object CfMavenRepoPlugin extends AutoPlugin:
   private lazy val republishMetadataCommand = Command.single(RepublishName) { (s, group) =>
     val x = Project.extract(s)
     val log = s.log
+    val dryRun = x.get(cfMavenRepoDryRun)
     val outcome = for
       bucket <- bucketOf(x)
-      target <- targetOf(x, purging = true)
+      target <- targetOf(x, purging = !dryRun)
       keys <- withStore(x, bucket) { store =>
         Publisher.artifactsUnder(store, target, group).left.map(describe).flatMap { artifacts =>
           if artifacts.isEmpty then Left(s"no artifacts found under $group")
+          // Listing only reads, so a dry run can say exactly which files it would rebuild.
+          else if dryRun then Right(artifacts.map(a => target.key(s"$a/${Coordinates.MetadataFileName}")))
           else Publisher.republishMetadata(store, artifacts, target).left.map(describe)
         }
       }
@@ -182,8 +185,9 @@ object CfMavenRepoPlugin extends AutoPlugin:
         log.error(message)
         s.fail
       case Right(keys) =>
-        keys.foreach(k => log.info(s"  rebuilt $k"))
-        log.info(s"rebuilt ${keys.size} metadata file(s)")
+        val verb = if dryRun then "would rebuild" else "rebuilt"
+        keys.foreach(k => log.info(s"  $verb $k"))
+        log.info(s"$verb ${keys.size} metadata file(s)")
         s
   }
 
