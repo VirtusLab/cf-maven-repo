@@ -137,9 +137,15 @@ git tag -a v0.1.0 -m v0.1.0 && git push origin v0.1.0
 
 `.github/workflows/release.yml` does the rest: Central and the native binaries run in parallel,
 and the binaries are attached to the release you wrote. If there is no release for the tag, the
-binaries half fails within seconds; create the release and re-run the workflow. Nothing publishes
-from a branch, and the version is never written in `build.sbt` — the tag is the single place a
-version is stated.
+binaries half fails within seconds; create the release and re-run only what failed, since the
+Central half has already published that version:
+
+```bash
+gh run rerun <run-id> --failed
+```
+
+Nothing publishes from a branch, and the version is never written in `build.sbt` — the tag is the
+single place a version is stated.
 
 Publish the draft as soon as the workflow is green. Until then its downloads are not public, and
 `cs install` — which already sees the version on Central — silently falls back to a JVM launcher.
