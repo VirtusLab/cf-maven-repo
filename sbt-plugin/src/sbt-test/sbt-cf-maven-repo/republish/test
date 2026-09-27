@@ -1,0 +1,12 @@
+> cfMavenRepoRelease
+> deleteKeys releases/org/example/republish/a_3/maven-metadata.xml releases/org/example/republish/b_3/maven-metadata.xml
+> checkAbsent releases/org/example/republish/a_3/maven-metadata.xml releases/org/example/republish/b_3/maven-metadata.xml
+# a dry run lists what it would rebuild and writes nothing
+> set ThisBuild / cfMavenRepoDryRun := true
+> cfMavenRepoRepublishMetadata org.example.republish
+> checkAbsent releases/org/example/republish/a_3/maven-metadata.xml releases/org/example/republish/b_3/maven-metadata.xml
+> set ThisBuild / cfMavenRepoDryRun := false
+> cfMavenRepoRepublishMetadata org.example.republish
+> checkMetadataLists releases/org/example/republish/a_3/maven-metadata.xml 1.0.0
+> checkMetadataLists releases/org/example/republish/b_3/maven-metadata.xml 1.0.0
+-> cfMavenRepoRepublishMetadata org.example.nothing

@@ -22,6 +22,16 @@ object Ledger:
 
   private val ScopeMarker = "# scope "
 
+  /** The scope [[open]] expects for a bucket and prefix. The same bucket name on R2, on MinIO and on AWS is three different destinations,
+    * so the host belongs in the identity of a ledger as much as the bucket and prefix do.
+    *
+    * @param endpoint
+    *   as given to [[S3ObjectStore]]; `AWS_ENDPOINT_URL_S3` stands in for it when absent, as it does there
+    */
+  def scope(endpoint: Option[String], bucket: String, prefix: String): String =
+    val host = endpoint.orElse(sys.env.get("AWS_ENDPOINT_URL_S3")).getOrElse("s3.amazonaws.com")
+    s"$host/$bucket/$prefix"
+
   /** @param scope
     *   identifies the destination this ledger describes, e.g. `bucket/prefix`.
     *

@@ -2,7 +2,7 @@ package org.virtuslab.mavenrepo.cloudflare
 
 import com.github.plokhotnyuk.jsoniter_scala.core.*
 import com.github.plokhotnyuk.jsoniter_scala.macros.*
-import org.virtuslab.mavenrepo.CachePurger
+import org.virtuslab.mavenrepo.{CachePurger, PublishTarget}
 import sttp.client4.*
 
 import scala.util.control.NonFatal
@@ -109,6 +109,36 @@ object CloudflarePurger:
     case Retry(message: String)
 
   def fromEnv(zoneId: String): Either[String, CloudflarePurger] =
-    sys.env.get("CLOUDFLARE_API_TOKEN") match
-      case Some(token) => Right(CloudflarePurger(zoneId, token))
-      case None        => Left("CLOUDFLARE_API_TOKEN is not set")
+    tokenFromEnv.map(CloudflarePurger(zoneId, _))
+
+  /** The publish target for a prefix, purging through Cloudflare when both a public URL and a zone are given. Either one alone is refused:
+    * a URL with no zone has nothing to purge, and a zone with no URL has no URLs to purge by.
+    *
+    * @param purging
+    *   false for a dry run, which reaches no cache and so needs no purge credential
+    * @param token
+    *   read only when a purger is actually built, so a run that purges nothing needs no token
+    */
+  def target(
+      prefix: String,
+      publicUrl: Option[String],
+      zoneId: Option[String],
+      purging: Boolean,
+      token: => Either[String, String]
+  ): Either[String, PublishTarget] =
+    (publicUrl, zoneId) match
+      case (None, None)    => Right(PublishTarget(prefix = prefix))
+      case (Some(_), None) =>
+        Left("a public URL needs a Cloudflare zone id: without a zone there is nothing to purge")
+      case (None, Some(_)) =>
+        Left("a Cloudflare zone id needs a public URL: purge works on URLs, not on object keys")
+      case (url @ Some(_), Some(_)) if !purging =>
+        Right(PublishTarget(prefix = prefix, publicUrl = url))
+      case (url @ Some(_), Some(zone)) =>
+        token.map { t =>
+          PublishTarget(prefix = prefix, purger = Some(CloudflarePurger(zone, t)), publicUrl = url)
+        }
+
+  /** `CLOUDFLARE_API_TOKEN`, for [[target]]. */
+  def tokenFromEnv: Either[String, String] =
+    sys.env.get("CLOUDFLARE_API_TOKEN").toRight("CLOUDFLARE_API_TOKEN is not set")

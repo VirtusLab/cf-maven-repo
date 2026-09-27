@@ -44,7 +44,7 @@ ThisBuild / scalacOptions ++= Seq(
 )
 
 lazy val root = (project in file("."))
-  .aggregate(core, cloudflare, cli)
+  .aggregate(core, cloudflare, cli, sbtPlugin)
   .settings(
     name := "cf-maven-repo",
     publish / skip := true
@@ -116,4 +116,26 @@ lazy val cli = (project in file("cli"))
         MergeStrategy.discard
       case _ => MergeStrategy.first
     }
+  )
+
+// sbt 2 only: sbt 1 plugins are Scala 2.12, and core is Scala 3.
+lazy val sbtPlugin = (project in file("sbt-plugin"))
+  .enablePlugins(SbtPlugin)
+  .dependsOn(core, cloudflare)
+  .settings(
+    name := "sbt-cf-maven-repo",
+    // A plugin is loaded by sbt's own Scala, so it compiles with that rather than with the
+    // libraries' 3.3 LTS; `+publishSigned` publishes each project on its own version.
+    scalaVersion := "3.8.4",
+    crossScalaVersions := Seq("3.8.4"),
+    // Compiled against the oldest sbt 2 so it loads in every later one, as sbt-ci-release does.
+    pluginCrossBuild / sbtVersion := "2.0.0",
+    // Otherwise scripted would run the test builds on 2.0.0 as well.
+    scriptedSbt := sbtVersion.value,
+    scriptedLaunchOpts ++= Seq("-Xmx1g", s"-Dplugin.version=${version.value}"),
+    scriptedBufferLog := false,
+    // The test builds resolve the plugin from the local repository, and its libraries with it.
+    scriptedDependencies := scriptedDependencies
+      .dependsOn(core / publishLocal, cloudflare / publishLocal)
+      .value
   )

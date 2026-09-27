@@ -138,3 +138,31 @@ class CloudflarePurgerSuite extends munit.FunSuite:
     assert(result.isLeft, result)
     assertEquals(seen.size, 2, "the third batch must never be sent")
   }
+
+class CloudflareTargetSuite extends munit.FunSuite:
+
+  private def noToken: Either[String, String] = throw AssertionError("the token must not be read")
+
+  test("no public URL and no zone: a plain target, and no token is read") {
+    val target = CloudflarePurger.target("releases", None, None, purging = true, noToken)
+    assertEquals(target.map(t => (t.prefix, t.purger, t.publicUrl)), Right(("releases", None, None)))
+  }
+
+  test("a public URL or a zone alone is refused") {
+    assert(CloudflarePurger.target("p", Some("https://m.example"), None, purging = true, noToken).isLeft)
+    assert(CloudflarePurger.target("p", None, Some("zone"), purging = true, noToken).isLeft)
+  }
+
+  test("a dry run keeps the public URL but builds no purger and reads no token") {
+    val target = CloudflarePurger.target("p", Some("https://m.example"), Some("zone"), purging = false, noToken)
+    assertEquals(target.map(t => (t.purger, t.publicUrl)), Right((None, Some("https://m.example"))))
+  }
+
+  test("both given: a purger, or the token's own error when there is none") {
+    val built = CloudflarePurger.target("p", Some("https://m.example"), Some("zone"), purging = true, Right("t"))
+    assert(built.exists(_.purger.isDefined), built)
+    assertEquals(
+      CloudflarePurger.target("p", Some("https://m.example"), Some("zone"), purging = true, Left("no token")),
+      Left("no token")
+    )
+  }
