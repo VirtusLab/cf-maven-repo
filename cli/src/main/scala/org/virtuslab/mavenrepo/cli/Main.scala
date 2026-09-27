@@ -62,61 +62,26 @@ object Main extends CommandsEntryPoint:
   def progName = "cf-maven-repo"
   def commands = Seq(PublishCommand, RepublishMetadataCommand)
 
-/** The same bucket name on R2, on MinIO and on AWS is three different destinations, so the host belongs in the identity of a ledger as much
-  * as the bucket and prefix do.
-  */
-private def ledgerScope(args: PublishArgs): String =
-  val host = args.endpoint.orElse(sys.env.get("AWS_ENDPOINT_URL_S3")).getOrElse("s3.amazonaws.com")
-  s"$host/${args.bucket}/${args.prefix}"
-
-/** @param purging false for a dry run, which reaches no cache and so needs no purge credential */
 private def buildTarget(
     prefix: String,
     publicUrl: Option[String],
     cfZoneId: Option[String],
     purging: Boolean = true
 ): Either[String, PublishTarget] =
+  // The pairing is checked here too, so the refusal names the flags rather than the concepts.
   (publicUrl, cfZoneId) match
-    case (None, None)    => Right(PublishTarget(prefix = prefix))
-    case (Some(_), None) =>
-      Left("--public-url needs --cf-zone-id: without a zone there is nothing to purge")
-    case (None, Some(_)) =>
-      Left("--cf-zone-id needs --public-url: purge works on URLs, not on object keys")
-    case (url @ Some(_), Some(_)) if !purging =>
-      Right(PublishTarget(prefix = prefix, publicUrl = url))
-    case (url @ Some(_), Some(zone)) =>
-      CloudflarePurger.fromEnv(zone).map { purger =>
-        PublishTarget(prefix = prefix, purger = Some(purger), publicUrl = url)
-      }
+    case (Some(_), None) => Left("--public-url needs --cf-zone-id: without a zone there is nothing to purge")
+    case (None, Some(_)) => Left("--cf-zone-id needs --public-url: purge works on URLs, not on object keys")
+    case _               => CloudflarePurger.target(prefix, publicUrl, cfZoneId, purging, CloudflarePurger.tokenFromEnv)
 
-private def describe(e: PublishError): String = e match
-  case PublishError.InvalidLayout(dir, reason) =>
-    s"$dir is not a version directory: $reason"
-  case PublishError.AlreadyPublished(c, key) =>
-    s"refusing to republish $c: $key already exists. A release version is never rewritten.\n" +
-      "  (pass --skip-existing to treat it as already done)"
-  case PublishError.MissingPom(directory, expected) =>
-    s"$directory holds a .pom but not $expected, so nothing would mark the version published"
-  case PublishError.InvalidPom(pom, problem) => s"$pom cannot be published: $problem"
-  case PublishError.MissingETag(key)         =>
-    s"the store returned no ETag for $key, so its version list cannot be rewritten safely"
-  case PublishError.NothingToPublish(root) =>
-    s"no version directory under $root - a version directory is one holding a .pom.\n" +
-      "  (pass --allow-empty if publishing nothing is expected)"
-  case PublishError.SnapshotVersion(c) =>
-    s"$c is a snapshot, and everything published here is immutable.\n" +
-      "  (pass --allow-snapshots to publish it as an ordinary version anyway)"
-  case PublishError.ChecksumMismatch(file, algorithm, expected, actual) =>
-    s"$file declares $algorithm $expected but the artifact hashes to $actual"
-  case PublishError.ConcurrentWrite(key) =>
-    s"$key appeared while we were writing it, holding different content - another run won the race"
-  case PublishError.AmbiguousWrite(key, detail) =>
-    s"could not establish who wrote $key: $detail"
-  case PublishError.MetadataConflict(key) =>
-    s"gave up rewriting $key - another publisher kept changing the version list"
-  case PublishError.UploadFailed(key, cause) => s"upload of $key failed: ${cause.getMessage}"
-  case PublishError.StoreFailure(op, cause)  => s"$op failed: ${cause.getMessage}"
-  case PublishError.PurgeFailed(message)     => s"cache purge failed: $message"
+/** The core message, plus the flag that turns the refusal off where there is one. */
+private def describe(e: PublishError): String =
+  val hint = e match
+    case _: PublishError.AlreadyPublished => Some("pass --skip-existing to treat it as already done")
+    case _: PublishError.NothingToPublish => Some("pass --allow-empty if publishing nothing is expected")
+    case _: PublishError.SnapshotVersion  => Some("pass --allow-snapshots to publish it as an ordinary version anyway")
+    case _                                => None
+  e.message + hint.fold("")(h => s"\n  ($h)")
 
 object PublishCommand extends Command[PublishArgs]:
   override def name = "publish"
@@ -136,7 +101,7 @@ object PublishCommand extends Command[PublishArgs]:
       verifyStagedChecksums = !args.trustStagedChecksums,
       verifyPomCoordinates = !args.trustPomCoordinates,
       ledger = args.ledger
-        .map(l => Ledger.open(Path.of(l), ledgerScope(args)))
+        .map(l => Ledger.open(Path.of(l), Ledger.scope(args.endpoint, args.bucket, args.prefix)))
         .getOrElse(Ledger.disabled)
     )
 

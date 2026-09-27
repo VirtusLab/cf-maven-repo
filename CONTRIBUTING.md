@@ -27,6 +27,17 @@ libraries built by scala-cli, sbt and mill, and resolves them back with scala-cl
 gradle and mill — version ranges included. Only edge caching and purging need a real CDN. Mill
 needs no install: the harness uses the launcher committed in `e2e/lib-mill/`.
 
+```bash
+e2e/sbt-plugin-flow.sh                             # every scripted test of the sbt plugin
+e2e/sbt-plugin-flow.sh sbt-cf-maven-repo/release   # one of them
+```
+
+The plugin's scripted tests are sbt builds of their own under `sbt-plugin/src/sbt-test/`, forked
+by `sbtPlugin/scripted`. This starts a MinIO the same way and hands the builds its endpoint and
+bucket through `CF_MAVEN_TEST_ENDPOINT` and `CF_MAVEN_TEST_BUCKET`, so running `scripted` from an
+sbt server started without them fails at load, by design. The builds check the bucket with the
+plugin's own `S3ObjectStore`.
+
 To run the harness against a real repository, say so in the environment:
 
 ```bash

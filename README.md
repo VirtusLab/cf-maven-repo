@@ -76,6 +76,42 @@ resolvers += "my-maven" at "https://maven.example.com/releases"
 def repositories = Task { super.repositories() :+ "https://maven.example.com/releases" }
 ```
 
+### sbt plugin
+
+On sbt 2, the plugin does the first two steps in one command: it stages every module of the
+build into one directory and uploads it in a single run, so each artifact's `maven-metadata.xml`
+is rebuilt once however many modules there are.
+
+```scala
+// project/plugins.sbt
+addSbtPlugin("org.virtuslab" % "sbt-cf-maven-repo" % "0.2.0")
+```
+
+```scala
+// build.sbt
+ThisBuild / cfMavenRepoBucket := "my-maven"
+ThisBuild / cfMavenRepoEndpoint := Some("https://<account>.r2.cloudflarestorage.com")
+ThisBuild / cfMavenRepoPublicUrl := Some("https://maven.example.com") // with cfMavenRepoCfZoneId, purges
+```
+
+```bash
+sbt cfMavenRepoRelease                 # publish every module, then upload
+sbt "cfMavenRepoRelease publishSigned" # the same, signed by sbt-pgp
+```
+
+`cfMavenRepoRelease` points every project's `publishTo` at the staging directory for the length of
+the run and puts the build's own back afterwards, whether it succeeds or fails. The publish step is
+named as a string, so signing needs sbt-pgp in the build but not in the plugin, and
+`"cfMavenRepoRelease +publishSigned"` cross-builds. To stage by hand instead, as with sbt's own
+`localStaging`, set `publishTo := cfMavenRepoStaging.value`, run `publish`, then
+`cfMavenRepoUpload`. `cfMavenRepoRepublishMetadata <groupId>` is the plugin's `republish-metadata`.
+
+Every CLI flag is a `ThisBuild` setting of the same name: `cfMavenRepoPrefix`,
+`cfMavenRepoPathStyle`, `cfMavenRepoDryRun`, `cfMavenRepoSkipExisting`, `cfMavenRepoLedger` and so
+on. Credentials come from the AWS default chain unless `cfMavenRepoAwsProfile` or
+`cfMavenRepoCredentials` says otherwise, and the purge token from `CLOUDFLARE_API_TOKEN` unless
+`cfMavenRepoCloudflareTokenFile` names a file (see [Credentials](#credentials)).
+
 ## Modules
 
 | module | depends on | for |
@@ -83,6 +119,7 @@ def repositories = Task { super.repositories() :+ "https://maven.example.com/rel
 | `core` | AWS SDK v2, maven-artifact | the whole publishing model. No HTTP or JSON stack. |
 | `cloudflare` | core, sttp4, jsoniter | edge cache invalidation after a publish |
 | `cli` | both, case-app | the command-line front end |
+| `sbt-cf-maven-repo` | both, sbt 2 | the sbt plugin; published as `sbt-cf-maven-repo_sbt2_3` |
 
 `core` deliberately pulls in nothing beyond the S3 client and Maven's version comparator, so
 publishing to a plain bucket, a Nexus or an Artifactory costs you no transitive weight for a CDN
@@ -187,6 +224,13 @@ AWS_ACCESS_KEY_ID=<token id>              # uploads, SigV4
 AWS_SECRET_ACCESS_KEY=<sha256 of value>
 CLOUDFLARE_API_TOKEN=<token value>        # purging, bearer
 ```
+
+**From sbt.** sbt 2 runs builds in a long-lived server, and a client started later does not pass
+its environment on: exporting `AWS_*` in a new shell and running `sbt cfMavenRepoRelease` against
+a server that is already up publishes with whatever the server started with. Prefer
+`ThisBuild / cfMavenRepoAwsProfile := Some("...")`, or `cfMavenRepoCredentials` for anything the AWS
+SDK can express, and `cfMavenRepoCloudflareTokenFile` for the purge token — all read when the
+command runs. Otherwise start sbt with the variables already set (`sbt --server` in CI).
 
 It deliberately holds no infrastructure permission: a leaked release credential can write objects
 into one bucket and bust one cache, and nothing else.

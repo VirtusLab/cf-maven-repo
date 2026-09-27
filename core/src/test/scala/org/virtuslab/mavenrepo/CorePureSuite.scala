@@ -266,3 +266,39 @@ class RetrySuite extends munit.FunSuite:
     val policy = Retry.Policy(maxRetries = 10, initialBackoffMillis = 1000L, maxBackoffMillis = 16000L)
     assertEquals((1 to 7).map(policy.backoffMillis).toList, List(1000L, 2000L, 4000L, 8000L, 16000L, 16000L, 16000L))
   }
+
+class LedgerScopeSuite extends munit.FunSuite:
+
+  test("the endpoint's host is part of the scope") {
+    assertEquals(Ledger.scope(Some("http://127.0.0.1:9000"), "b", "releases"), "http://127.0.0.1:9000/b/releases")
+    assertNotEquals(Ledger.scope(Some("https://r2.example"), "b", "releases"), Ledger.scope(Some("http://minio"), "b", "releases"))
+  }
+
+  test("without an endpoint, AWS S3 is the host") {
+    assume(sys.env.get("AWS_ENDPOINT_URL_S3").isEmpty, "AWS_ENDPOINT_URL_S3 redirects the default")
+    assertEquals(Ledger.scope(None, "b", "p"), "s3.amazonaws.com/b/p")
+  }
+
+class PublishErrorMessageSuite extends munit.FunSuite:
+
+  private val c = Coordinates("org.example", "a_3", "1.0.0")
+
+  test("messages name no option: each front end adds its own hint") {
+    val errors = Seq(
+      PublishError.AlreadyPublished(c, "releases/x.pom"),
+      PublishError.NothingToPublish(java.nio.file.Path.of("staging")),
+      PublishError.SnapshotVersion(c.copy(version = "1.0.0-SNAPSHOT"))
+    )
+    errors.foreach { e =>
+      assert(!e.message.contains("--"), e.message)
+      assert(!e.message.contains("pass "), e.message)
+    }
+  }
+
+  test("a message carries the detail of the failure") {
+    assert(PublishError.AlreadyPublished(c, "releases/x.pom").message.contains("releases/x.pom"))
+    assert(PublishError.UploadFailed("k", RuntimeException("boom")).message.contains("boom"))
+    // Typed as the enum: on a PurgeFailed its own `message` field would win over the extension.
+    val purge: PublishError = PublishError.PurgeFailed("403 denied")
+    assertEquals(purge.message, "cache purge failed: 403 denied")
+  }

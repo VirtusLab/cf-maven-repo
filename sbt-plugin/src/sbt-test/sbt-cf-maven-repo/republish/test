@@ -1,0 +1,7 @@
+> cfMavenRepoRelease
+> deleteKeys releases/org/example/republish/a_3/maven-metadata.xml releases/org/example/republish/b_3/maven-metadata.xml
+> checkAbsent releases/org/example/republish/a_3/maven-metadata.xml releases/org/example/republish/b_3/maven-metadata.xml
+> cfMavenRepoRepublishMetadata org.example.republish
+> checkMetadataLists releases/org/example/republish/a_3/maven-metadata.xml 1.0.0
+> checkMetadataLists releases/org/example/republish/b_3/maven-metadata.xml 1.0.0
+-> cfMavenRepoRepublishMetadata org.example.nothing

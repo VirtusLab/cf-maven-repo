@@ -103,6 +103,40 @@ enum PublishError:
 
   case PurgeFailed(message: String)
 
+object PublishError:
+
+  extension (e: PublishError)
+    /** What went wrong, in terms of the store and the staging tree. It names no option: each front end appends its own hint, spelled the
+      * way its own users switch the behaviour off.
+      *
+      * Call it on a `PublishError`: on a value typed as `PurgeFailed`, that case's own `message` field is selected instead.
+      */
+    def message: String = e match
+      case InvalidLayout(dir, reason) =>
+        s"$dir is not a version directory: $reason"
+      case AlreadyPublished(c, key) =>
+        s"refusing to republish $c: $key already exists. A release version is never rewritten."
+      case MissingPom(directory, expected) =>
+        s"$directory holds a .pom but not $expected, so nothing would mark the version published"
+      case InvalidPom(pom, problem) => s"$pom cannot be published: $problem"
+      case MissingETag(key)         =>
+        s"the store returned no ETag for $key, so its version list cannot be rewritten safely"
+      case NothingToPublish(root) =>
+        s"no version directory under $root - a version directory is one holding a .pom."
+      case SnapshotVersion(c) =>
+        s"$c is a snapshot, and everything published here is immutable."
+      case ChecksumMismatch(file, algorithm, expected, actual) =>
+        s"$file declares $algorithm $expected but the artifact hashes to $actual"
+      case ConcurrentWrite(key) =>
+        s"$key appeared while we were writing it, holding different content - another run won the race"
+      case AmbiguousWrite(key, detail) =>
+        s"could not establish who wrote $key: $detail"
+      case MetadataConflict(key) =>
+        s"gave up rewriting $key - another publisher kept changing the version list"
+      case UploadFailed(key, cause) => s"upload of $key failed: ${cause.getMessage}"
+      case StoreFailure(op, cause)  => s"$op failed: ${cause.getMessage}"
+      case PurgeFailed(message)     => s"cache purge failed: $message"
+
 /** Publishes a staging directory to an object store.
   *
   * Upload order is a correctness property, not a preference. Within a run: every checksum, then every artifact except the POM, then the

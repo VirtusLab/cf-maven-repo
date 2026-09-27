@@ -1,0 +1,4 @@
+> cfMavenRepoRelease
+$ exists target/cf-maven-staging/org/example/dryrun/a_3/1.0.0/a_3-1.0.0.pom
+$ exists target/cf-maven-staging/org/example/dryrun/b_3/1.0.0/b_3-1.0.0.pom
+> checkAbsent releases/org/example/dryrun/a_3/1.0.0/a_3-1.0.0.pom releases/org/example/dryrun/b_3/1.0.0/b_3-1.0.0.pom releases/org/example/dryrun/a_3/maven-metadata.xml

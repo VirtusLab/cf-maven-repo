@@ -90,6 +90,23 @@ jobs:
       - name: publish to minio and resolve with every build tool
         run: ./e2e/local-flow.sh
 
+  # The sbt plugin's scripted tests, each a separate sbt build publishing to a disposable MinIO.
+  sbt-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: sbt
+
+      - uses: sbt/setup-sbt@v1
+
+      - name: scripted tests against minio
+        run: ./e2e/sbt-plugin-flow.sh
+
   scripts:
     runs-on: ubuntu-latest
     steps:
